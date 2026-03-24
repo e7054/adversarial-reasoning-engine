@@ -14,7 +14,6 @@ st.sidebar.header("Setup")
 gemini_key = st.sidebar.text_input("Gemini API Key", type="password")
 
 model = None
-model_name = None
 
 if gemini_key:
     try:
@@ -23,38 +22,30 @@ if gemini_key:
 
         for m in models:
             if "generateContent" in m.supported_generation_methods:
-                model_name = m.name
+                model = genai.GenerativeModel(m.name)
                 break
 
-        if model_name:
-            model = genai.GenerativeModel(model_name)
-
     except Exception as e:
-        st.sidebar.error(f"Model init failed: {str(e)}")
-
-if model_name:
-    st.sidebar.success(f"Using: {model_name}")
-else:
-    st.sidebar.warning("No valid model detected")
+        st.sidebar.error(str(e))
 
 # ------------------------
 # HELPERS
 # ------------------------
 def extract_json(text):
     if not text:
-        return {"error": "Empty response from model"}
+        return {"error": "Empty response"}
 
     try:
         return json.loads(text)
     except:
-        try:
-            match = re.search(r"\{.*\}", text, re.DOTALL)
-            if match:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            try:
                 return json.loads(match.group(0))
-        except:
-            pass
+            except:
+                pass
 
-    return {"raw_output": text}
+    return {"answer": text}
 
 def call_model(prompt):
     try:
@@ -63,41 +54,26 @@ def call_model(prompt):
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-def run_stage(label, prompt):
-    st.write(f"### {label}")
-    raw = call_model(prompt)
-    parsed = extract_json(raw)
-
-    with st.expander(f"{label} Output"):
-        st.write(parsed)
-
-    return parsed
-
 # ------------------------
-# ENGINE
+# SIMPLE ENGINE (STABLE)
 # ------------------------
 def run_engine(user_input):
-    data = run_stage(
-        "1. Understanding",
-        f"Return JSON with intent, constraints, requirements: {user_input}"
-    )
+    prompt = f"""
+You are a precise reasoning engine.
 
-    data = run_stage(
-        "2. Build Solution",
-        f"Return JSON with full solution: {json.dumps(data)}"
-    )
+Return STRICT JSON:
+{{
+  "answer": "...clear answer...",
+  "key_points": ["...", "..."],
+  "assumptions": ["..."],
+  "confidence": "high | medium | low"
+}}
 
-    data = run_stage(
-        "3. Critique",
-        f"Return JSON listing flaws, risks, edge cases: {json.dumps(data)}"
-    )
-
-    data = run_stage(
-        "4. Improve",
-        f"Return JSON with corrected and final solution: {json.dumps(data)}"
-    )
-
-    return data
+Question:
+{user_input}
+"""
+    raw = call_model(prompt)
+    return extract_json(raw)
 
 # ------------------------
 # UI
@@ -112,8 +88,19 @@ if st.button("Run Analysis"):
     elif not user_input.strip():
         st.warning("Enter a request")
     else:
-        with st.spinner("Running reasoning engine..."):
-            result = run_engine(user_input)
+        result = run_engine(user_input)
 
-        st.subheader("Final Answer")
-        st.write(result.get("solution", result))
+        if "answer" in result:
+            st.subheader("Answer")
+            st.write(result["answer"])
+
+            st.subheader("Key Points")
+            st.write(result.get("key_points", []))
+
+            st.subheader("Assumptions")
+            st.write(result.get("assumptions", []))
+
+            st.subheader("Confidence")
+            st.write(result.get("confidence", "unknown"))
+        else:
+            st.write(result)
