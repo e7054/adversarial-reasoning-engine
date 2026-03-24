@@ -35,27 +35,34 @@ if api_key:
         st.sidebar.error(str(e))
 
 # ------------------------
-# RUN
-# ------------------------
-def run_engine(prompt):
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"ERROR: {str(e)}"
-
-# ------------------------
-# UI
+# UI INPUT
 # ------------------------
 user_input = st.text_area("Enter your question")
 
+# ------------------------
+# RUN BUTTON
+# ------------------------
 if st.button("Run"):
+    st.write("Running...")  # FORCE visible feedback
+
     if not api_key:
         st.warning("Enter API key")
+
     elif not model:
         st.error("Model not available")
+
     elif not user_input.strip():
         st.warning("Enter a question")
+
     else:
-        result = run_engine(user_input)
-        st.write(result)
+        try:
+            response = model.generate_content(user_input)
+
+            if response and hasattr(response, "text"):
+                st.subheader("Answer")
+                st.write(response.text)
+            else:
+                st.error("No response from model")
+
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
