@@ -19,7 +19,6 @@ if api_key:
         models = list(genai.list_models())
 
         valid_model = None
-
         for m in models:
             if "generateContent" in m.supported_generation_methods:
                 valid_model = m.name
@@ -35,15 +34,66 @@ if api_key:
         st.sidebar.error(str(e))
 
 # ------------------------
-# UI INPUT
+# CORE CALL
+# ------------------------
+def call_model(prompt):
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+# ------------------------
+# MULTI-PASS ENGINE
+# ------------------------
+def run_engine(question):
+    # PASS 1 — INITIAL ANSWER
+    draft_prompt = f"""
+Answer the question thoroughly and rigorously.
+
+Question:
+{question}
+"""
+    draft = call_model(draft_prompt)
+
+    # PASS 2 — CRITIQUE
+    critique_prompt = f"""
+Critically evaluate the following answer.
+
+Identify:
+- flaws
+- gaps
+- incorrect assumptions
+- missing edge cases
+
+Answer:
+{draft}
+"""
+    critique = call_model(critique_prompt)
+
+    # PASS 3 — IMPROVE
+    improve_prompt = f"""
+Improve the original answer using the critique.
+
+Produce a final, corrected, higher-quality answer.
+
+Original Answer:
+{draft}
+
+Critique:
+{critique}
+"""
+    final = call_model(improve_prompt)
+
+    return draft, critique, final
+
+# ------------------------
+# UI
 # ------------------------
 user_input = st.text_area("Enter your question")
 
-# ------------------------
-# RUN BUTTON
-# ------------------------
 if st.button("Run"):
-    st.write("Running...")  # FORCE visible feedback
+    st.write("Running multi-pass reasoning...")
 
     if not api_key:
         st.warning("Enter API key")
@@ -55,14 +105,13 @@ if st.button("Run"):
         st.warning("Enter a question")
 
     else:
-        try:
-            response = model.generate_content(user_input)
+        draft, critique, final = run_engine(user_input)
 
-            if response and hasattr(response, "text"):
-                st.subheader("Answer")
-                st.write(response.text)
-            else:
-                st.error("No response from model")
+        st.subheader("🧩 Initial Answer")
+        st.write(draft)
 
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+        st.subheader("🔍 Critique")
+        st.write(critique)
+
+        st.subheader("✅ Final Improved Answer")
+        st.write(final)
